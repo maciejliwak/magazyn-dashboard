@@ -1,0 +1,45 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>📌 Przekazanie części klientowi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-4">
+  <div class="container">
+    <h1 class="text-primary mb-4">📌 Przekazanie części klientowi</h1>
+
+    <div class="mb-3">
+      <strong>Część:</strong> {{ czesc.nazwa }}<br>
+      <strong>Numer seryjny:</strong> {{ czesc.numer_seryjny }}<br>
+      <strong>Magazyn:</strong> {{ czesc.magazyn.nazwa }}<br>
+      <strong>Ilość dostępna:</strong> {{ czesc.ilosc }}
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label for="id_klient_nazwa" class="form-label">Klient:</label>
+        {{ form.klient_nazwa }}
+      </div>
+      <div class="mb-3">
+        <label for="id_numer_zgloszenia" class="form-label">Numer zgłoszenia:</label>
+        {{ form.numer_zgloszenia }}
+      </div>
+      <div class="mb-3">
+        <label for="id_ilosc_do_przekazania" class="form-label">Ilość do przekazania:</label>
+        {{ form.ilosc_do_przekazania }}
+      </div>
+      <div class="mb-3">
+        <label for="id_uwagi" class="form-label">Uwagi:</label>
+        {{ form.uwagi }}
+      </div>
+
+      <button type="submit" class="btn btn-danger">📌 Potwierdź przekazanie</button>
+      <a href="{% url 'dashboard' %}" class="btn btn-secondary ms-2">↩ Anuluj</a>
+    </form>
+  </div>
+</body>
+</html>

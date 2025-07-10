@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Przesuń urządzenie</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-5">
+  <div class="container">
+    <h2 class="text-info mb-4">🔁 Przesuń urządzenie do innego magazynu</h2>
+
+    <div class="mb-3">
+      <strong>Urządzenie:</strong> {{ urzadzenie.nazwa }}<br>
+      <strong>Numer seryjny:</strong> {{ urzadzenie.numer_seryjny }}<br>
+      <strong>Obecny magazyn:</strong> {{ urzadzenie.magazyn.nazwa }}
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="mt-3">
+        <button type="submit" class="btn btn-info">🔁 Przesuń</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">↩ Powrót</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

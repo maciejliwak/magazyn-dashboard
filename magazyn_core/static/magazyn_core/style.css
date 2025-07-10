@@ -1,0 +1,52 @@
+/* 🌟 Optymalizacja wyglądu tabel w dashboardzie */
+.table-sm td,
+.table-sm th {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 🟢 Badge'y w kolumnie "Wypożyczony" */
+.badge.bg-warning,
+.badge.bg-success {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
+/* 📋 Przyciski w kolumnach "Akcje" */
+td .btn {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+/* 🎯 Dodatkowa optymalizacja dla przycisków w formularzu zwrotu */
+.table-sm td form {
+  margin: 0;
+}
+
+.table-sm td button {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+/* 📐 Responsywność tabel */
+.table-responsive {
+  overflow-x: auto;
+}
+
+.table thead th {
+  text-align: center;
+}
+
+/* 🧾 Wyrównanie nagłówków sekcji */
+section.mb-5 {
+  margin-bottom: 2rem;
+}
+
+h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}

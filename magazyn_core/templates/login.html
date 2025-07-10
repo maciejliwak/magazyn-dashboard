@@ -1,0 +1,15 @@
+<h2 class="mb-4">🔐 Zaloguj się</h2>
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label>Nazwa użytkownika:</label>
+    <input type="text" name="username" class="form-control" required>
+  </div>
+
+  <div class="mb-3">
+    <label>Hasło:</label>
+    <input type="password" name="password" class="form-control" required>
+  </div>
+
+  <button type="submit" class="btn btn-primary mt-3">✅ Zaloguj się</button>
+</form>

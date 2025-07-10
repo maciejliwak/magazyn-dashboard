@@ -1,0 +1,309 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'magazyn_core/style.css' %}">
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>📦 Dashboard Magazynowy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-4">
+  <div class="container">
+
+    {% if messages %}
+      <div class="my-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <header class="mb-4">
+  <div class="d-flex justify-content-between align-items-center">
+    <div>
+      <h1 class="text-primary">📦 Dashboard Magazynowy</h1>
+      <p class="text-muted small fst-italic mt-1">Created by Livtech Maciej Liwak & AI 🤝</p>
+    </div>
+    <div>
+      👤 <strong>{{ request.user.username }}</strong>
+      <a href="{% url 'password_change' %}" class="btn btn-sm btn-outline-secondary ms-2">🔐 Zmień hasło</a>
+      <a href="{% url 'logout' %}" class="btn btn-sm btn-outline-danger ms-2">🚪 Wyloguj się</a>
+    </div>
+  </div>
+
+      {% if not request.user.groups.all.0.name == "Obserwator" %}
+      <div class="d-flex gap-3 flex-wrap my-3">
+        <a href="{% url 'add_urzadzenie' %}" class="btn btn-outline-primary">➕ Dodaj urządzenie</a>
+        <a href="{% url 'add_czesc' %}" class="btn btn-outline-warning">➕ Dodaj część</a>
+        <a href="{% url 'eksport_excel' %}" class="btn btn-success">📁 Eksport magazynu</a>
+        <a href="{% url 'eksport_widoku_excel' %}?magazyn={{ wybrany_magazyn }}&q={{ fraza }}" class="btn btn-info">📤 Eksport widoku</a>
+        <a href="{% url 'eksport_logi' %}" class="btn btn-secondary">📄 Eksport historii</a>
+        <a href="{% url 'rejestruj_obserwatora' %}" class="btn btn-outline-dark">👥 Dodaj obserwatora</a>
+      </div>
+      {% endif %}
+
+     <form method="get" onsubmit="pokazLadowanie()">
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label for="magazyn" class="form-label">Filtruj po magazynie:</label>
+
+      {% if not request.user.groups.all.0.name == "Obserwator" %}
+        <select id="magazyn" name="magazyn" class="form-select" onchange="this.form.submit()">
+          <option value="">-- Wszystkie magazyny --</option>
+          {% for m in magazyny %}
+            <option value="{{ m.id }}" {% if m.id == wybrany_magazyn %}selected{% endif %}>{{ m.nazwa }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <p class="form-control bg-light">{{ magazyny.first.nazwa }}</p>
+      {% endif %}
+    </div>
+
+    <div class="col-md-6">
+      <label for="q" class="form-label">Szukaj:</label>
+      <div class="input-group">
+        <input type="text" id="q" name="q" value="{{ fraza }}" class="form-control" placeholder="np. UPS, Dell, XYZ">
+        <a href="{% url 'dashboard' %}?magazyn={{ wybrany_magazyn }}" class="btn btn-outline-secondary">❌</a>
+      </div>
+      <div class="mt-2 d-flex gap-2">
+        <button type="submit" id="szukajBtn" class="btn btn-primary">🔎 Szukaj</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">♻ Wyczyść filtr</a>
+      </div>
+    </div>
+  </div>
+</form>
+
+
+    <!-- 🔌 Urządzenia -->
+    <section class="mb-5">
+      <h2>🔌 Urządzenia</h2>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle table-striped">
+          <thead class="table-light">
+            <tr>
+              <th>Nazwa</th>
+              <th>Producent</th>
+              <th>Model</th>
+              <th>Numer seryjny</th>
+              <th>Ilość</th>
+              <th>Magazyn</th>
+              <th>Wypożyczony</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in urzadzenia %}
+            <tr>
+              <td>{{ u.nazwa|default_if_none:"brak" }}</td>
+              <td>{{ u.producent|default_if_none:"brak" }}</td>
+              <td>{{ u.model|default_if_none:"brak" }}</td>
+              <td>{{ u.numer_seryjny|default_if_none:"brak" }}</td>
+              <td>{{ u.ilosc }}</td>
+              <td>{{ u.magazyn.nazwa|default_if_none:"brak" }}</td>
+              <td>
+                {% if u.wypozyczenia.count > 0 %}
+                  <span class="badge bg-warning text-dark">📦 Tak</span>
+                {% else %}
+                  <span class="badge bg-success">🆓 Nie</span>
+                {% endif %}
+              </td>
+              <td class="d-flex flex-wrap gap-1">
+                <a href="{% url 'historia_urzadzenia' u.id %}" class="btn btn-sm btn-outline-dark">📜 Historia</a>
+                {% if not request.user.groups.all.0.name == "Obserwator" %}
+                  <a href="{% url 'wypozycz_urzadzenie' u.id %}" class="btn btn-sm btn-outline-success">📤 Wypożycz</a>
+                  <a href="{% url 'przesun_urzadzenie' u.id %}" class="btn btn-sm btn-outline-info">🔁 Przesuń</a>
+                  <a href="{% url 'oznacz_na_stale' u.id %}" class="btn btn-sm btn-outline-secondary">📌 Na stałe</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="text-center text-muted">Brak urządzeń w magazynie</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ⚙️ Części -->
+    <section class="mb-5">
+      <h2>⚙️ Części</h2>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle table-striped">
+          <thead class="table-light">
+            <tr>
+              <th>Nazwa</th>
+              <th>Producent</th>
+              <th>Model</th>
+              <th>Numer seryjny</th>
+              <th>Ilość</th>
+              <th>Magazyn</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in czesci %}
+            <tr>
+              <td>{{ c.nazwa|default_if_none:"brak" }}</td>
+              <td>{{ c.producent|default_if_none:"brak" }}</td>
+              <td>{{ c.model|default_if_none:"brak" }}</td>
+              <td>{{ c.numer_seryjny|default_if_none:"brak" }}</td>
+              <td>{{ c.ilosc }}</td>
+              <td>{{ c.magazyn.nazwa|default_if_none:"brak" }}</td>
+              <td class="d-flex gap-1">
+                {% if not request.user.groups.all.0.name == "Obserwator" %}
+                  <a href="{% url 'oznacz_czesc_na_stale' c.id %}" class="btn btn-sm btn-outline-secondary">📌 Na stałe</a>
+                  <a href="{% url 'dodaj_na_stan_czesc' c.id %}" class="btn btn-sm btn-outline-primary">➕ Dodaj na stan</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted">Brak części w magazynie</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 🎟️ Wypożyczenia -->
+<section class="mb-5">
+  <h2>🎟️ Wypożyczenia</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered table-striped align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Urządzenie</th>
+          <th>Numer seryjny</th>
+          <th>Klient</th>
+          <th>Zgłoszenie</th>
+          <th>Akcja</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in wypozyczenia %}
+        <tr>
+          <td>{{ w.urzadzenie.nazwa|default_if_none:"brak" }}</td>
+          <td>{{ w.urzadzenie.numer_seryjny|default_if_none:"brak" }}</td>
+          <td>{{ w.klient_nazwa|default:"brak" }}</td>
+          <td>{{ w.numer_zgloszenia|default:"brak" }}</td>
+          <td class="d-flex gap-1">
+            {% if not request.user.groups.all.0.name == "Obserwator" %}
+              <form method="post" action="{% url 'zwrot_urzadzenia' w.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">↩ Zwrot</button>
+              </form>
+              <a href="{% url 'oznacz_na_stale' w.urzadzenie.id %}" class="btn btn-sm btn-outline-secondary">📌 Na stałe</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted">Brak aktywnych wypożyczeń</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 📥 Archiwum urządzeń przekazanych -->
+<section class="mb-5">
+  <h2>📥 Archiwum urządzeń przekazanych</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered table-striped align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Nazwa</th>
+          <th>Numer seryjny</th>
+          <th>Producent</th>
+          <th>Model</th>
+          <th>Ilość</th>
+          <th>Magazyn</th>
+          <th>Klient</th>
+          <th>Zgłoszenie</th>
+          <th>Uwagi</th>
+          <th>Akcja</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in archiwum %}
+        <tr>
+          <td>{{ a.nazwa|default_if_none:"brak" }}</td>
+          <td>{{ a.numer_seryjny|default_if_none:"brak" }}</td>
+          <td>{{ a.producent|default_if_none:"brak" }}</td>
+          <td>{{ a.model|default_if_none:"brak" }}</td>
+          <td>{{ a.ilosc }}</td>
+          <td>{{ a.magazyn.nazwa|default_if_none:"brak" }}</td>
+          <td>{{ a.klient_nazwa|default:"brak" }}</td>
+          <td>{{ a.numer_zgloszenia|default:"brak" }}</td>
+          <td>{{ a.uwagi|default:"brak" }}</td>
+          <td>
+            {% if not request.user.groups.all.0.name == "Obserwator" %}
+              <form method="post" action="{% url 'przywroc_urzadzenie' a.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-primary">↩ Przywróć</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-muted">Brak urządzeń w archiwum</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 🧩 Archiwum części przekazanych -->
+<section class="mb-5">
+  <h2>🧩 Archiwum części przekazanych</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered table-striped align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Nazwa</th>
+          <th>Numer seryjny</th>
+          <th>Producent</th>
+          <th>Model</th>
+          <th>Ilość przekazana</th>
+          <th>Magazyn</th>
+          <th>Klient</th>
+          <th>Zgłoszenie</th>
+          <th>Uwagi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cz in czesci_przekazane %}
+        <tr>
+          <td>{{ cz.nazwa|default_if_none:"brak" }}</td>
+          <td>{{ cz.numer_seryjny|default_if_none:"brak" }}</td>
+          <td>{{ cz.producent|default_if_none:"brak" }}</td>
+          <td>{{ cz.model|default_if_none:"brak" }}</td>
+          <td>{{ cz.ilosc }}</td>
+          <td>{{ cz.magazyn.nazwa|default_if_none:"brak" }}</td>
+          <td>{{ cz.klient_nazwa|default:"brak" }}</td>
+          <td>{{ cz.numer_zgloszenia|default:"brak" }}</td>
+          <td>{{ cz.uwagi|default:"brak" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted">Brak części w archiwum</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div> <!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  function pokazLadowanie() {
+    const btn = document.getElementById("szukajBtn");
+    btn.innerHTML = "⏳ Szukam...";
+    btn.disabled = true;
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,32 @@
+{% block content %}
+<div class="container mt-5" style="max-width: 500px;">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h4 class="card-title mb-4 text-center" style="font-size: 1.6rem;">🔐 Ustaw nowe hasło</h4>
+
+            {% if messages %}
+              {% for message in messages %}
+                <div class="alert alert-success text-center">{{ message }}</div>
+              {% endfor %}
+            {% endif %}
+
+            <form method="POST" autocomplete="off">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <label for="password" class="form-label" style="font-size: 1.1rem;">Nowe hasło:</label>
+                    <input type="password" class="form-control" name="password" id="password"
+                           placeholder="Wpisz nowe hasło" autocomplete="new-password" required>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">✅ Zapisz hasło</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="text-center mt-3">
+        <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">🚪 Wyloguj się</a>
+    </div>
+</div>
+{% endblock %}

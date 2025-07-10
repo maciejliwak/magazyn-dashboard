@@ -1,0 +1,25 @@
+{% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<h2>👥 Dodaj użytkownika obserwatora</h2>
+<form method="post">
+  {% csrf_token %}
+  <label>Nazwa użytkownika:</label>
+  <input type="text" name="username" class="form-control" required>
+
+  <label>Email:</label>
+  <input type="email" name="email" class="form-control">
+
+  <label>Hasło startowe:</label>
+  <input type="password" name="password" class="form-control" required>
+
+  <label>Przypisz magazyn:</label>
+  <select name="magazyn" class="form-select">
+    {% for m in magazyny %}
+      <option value="{{ m.id }}">{{ m.nazwa }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit" class="btn btn-success mt-3">✅ Utwórz użytkownika</button>
+</form>

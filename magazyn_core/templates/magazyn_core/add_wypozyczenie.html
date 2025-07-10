@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Wypożycz urządzenie</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-5">
+  <div class="container">
+    <h2 class="text-success mb-4">📤 Wypożycz urządzenie</h2>
+
+    <div class="mb-3">
+      <strong>Urządzenie:</strong> {{ urzadzenie.nazwa }}<br>
+      <strong>Numer seryjny:</strong> {{ urzadzenie.numer_seryjny }}<br>
+      <strong>Magazyn:</strong> {{ urzadzenie.magazyn.nazwa }}
+    </div>
+
+    <form method="post" class="row g-3">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="col-12">
+        <button type="submit" class="btn btn-success">📤 Wypożycz</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">↩ Powrót</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

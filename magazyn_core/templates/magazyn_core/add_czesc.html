@@ -1,0 +1,122 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>➕ Dodaj część</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .checklist {
+      background-color: #f8f9fa;
+      border-left: 4px solid #ffc107;
+      padding: 1rem;
+      font-size: 0.95rem;
+    }
+    .checklist h5 {
+      color: #ffc107;
+      margin-bottom: 0.8rem;
+    }
+    .checklist ul {
+      padding-left: 1.2rem;
+    }
+    .checklist li {
+      margin-bottom: 0.4rem;
+    }
+  </style>
+</head>
+<body class="bg-light p-4">
+  <div class="container">
+    <h2 class="text-warning mb-4">➕ Dodaj nową część</h2>
+
+    <div class="row">
+      <div class="col-lg-8">
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger mb-3">
+            {% for error in form.non_field_errors %}
+              {{ error }}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <form method="post" class="mb-4">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label for="{{ form.nazwa.id_for_label }}" class="form-label">Nazwa części *</label>
+            {{ form.nazwa }}
+            {% for error in form.nazwa.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.producent.id_for_label }}" class="form-label">Producent (opcjonalnie)</label>
+            {{ form.producent }}
+            {% for error in form.producent.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.model.id_for_label }}" class="form-label">Model (opcjonalnie)</label>
+            {{ form.model }}
+            {% for error in form.model.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.numer_seryjny.id_for_label }}" class="form-label">Numer seryjny (opcjonalnie)</label>
+            {{ form.numer_seryjny }}
+            {% for error in form.numer_seryjny.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.ilosc.id_for_label }}" class="form-label">Ilość sztuk *</label>
+            {{ form.ilosc }}
+            {% for error in form.ilosc.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.magazyn.id_for_label }}" class="form-label">Magazyn docelowy *</label>
+            {{ form.magazyn }}
+            {% for error in form.magazyn.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.uwagi.id_for_label }}" class="form-label">Uwagi (opcjonalnie)</label>
+            {{ form.uwagi }}
+            {% for error in form.uwagi.errors %}
+              <div class="form-text text-danger">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <button type="submit" class="btn btn-warning">💾 Zapisz część</button>
+          <a href="{% url 'dashboard' %}" class="btn btn-secondary ms-2">↩ Powrót</a>
+        </form>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="checklist rounded shadow-sm">
+          <h5>📋 Checklista dodania części</h5>
+          <ul class="list-unstyled">
+            <li>📌 Nazwa części została wybrana</li>
+            <li>🔢 Ilość i magazyn zostały określone</li>
+            <li>🏷️ Producent, model i numer seryjny (jeśli znane)</li>
+            <li>🗒️ Uwagi — np. zastosowanie, dodatkowe info</li>
+          </ul>
+          <p class="text-muted mt-2 mb-0">Pola oznaczone gwiazdką (*) są obowiązkowe.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
