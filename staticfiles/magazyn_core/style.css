@@ -50,3 +50,12 @@ h2 {
   font-weight: 600;
   margin-bottom: 1rem;
 }
+
+.logo {
+    height: 80px;
+    margin-bottom: 20px;
+}
+
+.logo-container {
+    text-align: center;
+}
