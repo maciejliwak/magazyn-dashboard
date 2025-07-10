@@ -17,7 +17,7 @@ SECRET_KEY = 'django-insecure-eu^kkdngop1po*9oc4+)(gvxq^tgc0pbv#n@mp6&s327ac-=cr
 
 DEBUG = False
 
-ALLOWED_HOSTS = ['https://magazyn-dashboard.onrender.com']
+ALLOWED_HOSTS = ['*']
 
 
 
