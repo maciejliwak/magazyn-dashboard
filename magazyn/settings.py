@@ -15,9 +15,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-eu^kkdngop1po*9oc4+)(gvxq^tgc0pbv#n@mp6&s327ac-=cr'
 
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['https://magazyn-dashboard.onrender.com']
+
+
 
 
 # Application definition
