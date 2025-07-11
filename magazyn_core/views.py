@@ -1,22 +1,24 @@
 from datetime import datetime
 
 from django.contrib import messages
-from django.contrib.auth import logout, update_session_auth_hash
-from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.models import User, Group
+from django.contrib.auth import (
+    logout, update_session_auth_hash,
+    decorators as auth_decorators,
+    mixins as auth_mixins,
+    models as auth_models
+)
 from django.db import models
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic.edit import CreateView
 from openpyxl import Workbook
 
 from magazyn_core.models import (
-    Magazyn, Urzadzenie, Czesc, Wypozyczenie, OperacjaLog,
-    PrzesuniecieMagazynowe, ArchiwumUrzadzen
+    Magazyn, Urzadzenie, Czesc, Wypozyczenie,
+    OperacjaLog, PrzesuniecieMagazynowe, ArchiwumUrzadzen
 )
 from magazyn_core.forms import (
     UrzadzenieForm, CzescForm, WypozyczenieForm,
@@ -25,32 +27,34 @@ from magazyn_core.forms import (
 from userprofile.models import UserProfile
 
 
+# 🛡️ Pomocnicze funkcje
 def is_not_observer(user):
     return not user.groups.filter(name="Obserwator").exists()
 
 
-@login_required
+def get_wybrany_magazyn(request):
+    magazyn_id = request.GET.get("magazyn") or request.session.get("wybrany_magazyn_id")
+    try:
+        return int(magazyn_id) if magazyn_id else None
+    except (ValueError, TypeError):
+        return None
+@auth_decorators.login_required
 def dashboard(request):
-    magazyn_id = request.GET.get("magazyn")
     fraza = request.GET.get("q")
     sortuj = request.GET.get("sortuj") or "nazwa"
     kierunek = request.GET.get("kierunek") or "asc"
 
-    # ⛳ Przekształć parametr magazyn_id z URL
-    try:
-        wybrany_magazyn = int(magazyn_id) if magazyn_id else None
-    except (ValueError, TypeError):
-        wybrany_magazyn = None
+    wybrany_magazyn = get_wybrany_magazyn(request)
 
-    # 🛡️ Nadpisz magazyn dla obserwatora
     if request.user.groups.filter(name="Obserwator").exists():
         if hasattr(request.user, "userprofile") and request.user.userprofile.magazyn:
             wybrany_magazyn = request.user.userprofile.magazyn.id
 
-    # 📊 Ustal sortowanie
+    if wybrany_magazyn:
+        request.session['wybrany_magazyn_id'] = wybrany_magazyn
+
     sort_key = sortuj if kierunek == "asc" else f"-{sortuj}"
 
-    # 📁 Pokaż magazyny — tylko jeden dla obserwatora
     if request.user.groups.filter(name="Obserwator").exists():
         if hasattr(request.user, "userprofile") and request.user.userprofile.magazyn:
             magazyny = Magazyn.objects.filter(id=request.user.userprofile.magazyn.id)
@@ -59,16 +63,13 @@ def dashboard(request):
     else:
         magazyny = Magazyn.objects.all()
 
-    # 📦 Pobierz dane
     urzadzenia = Urzadzenie.objects.select_related("magazyn", "nazwa", "producent", "model") \
         .prefetch_related("wypozyczenia").filter(na_stale=False).order_by(sort_key)
-
     czesci = Czesc.objects.select_related("magazyn", "nazwa").filter(klient_nazwa__isnull=True)
     czesci_przekazane = Czesc.objects.select_related("magazyn", "nazwa").filter(klient_nazwa__isnull=False)
     wypozyczenia = Wypozyczenie.objects.select_related("urzadzenie")
     archiwum = ArchiwumUrzadzen.objects.select_related("magazyn", "nazwa", "producent", "model").order_by(sort_key)
 
-    # 📍 Filtrowanie po magazynie
     if wybrany_magazyn:
         urzadzenia = urzadzenia.filter(magazyn_id=wybrany_magazyn)
         czesci = czesci.filter(magazyn_id=wybrany_magazyn)
@@ -76,7 +77,6 @@ def dashboard(request):
         wypozyczenia = wypozyczenia.filter(urzadzenie__magazyn_id=wybrany_magazyn)
         archiwum = archiwum.filter(magazyn_id=wybrany_magazyn)
 
-    # 🔎 Filtrowanie po frazie
     if fraza:
         urzadzenia = urzadzenia.filter(
             models.Q(nazwa__nazwa__icontains=fraza) |
@@ -99,7 +99,6 @@ def dashboard(request):
             models.Q(numer_zgloszenia__icontains=fraza)
         )
 
-    # 📋 Zwróć dane do szablonu
     return render(request, "magazyn_core/index.html", {
         "magazyny": magazyny,
         "urzadzenia": urzadzenia,
@@ -114,20 +113,22 @@ def dashboard(request):
     })
 
 
-
 def custom_logout(request):
     logout(request)
     return redirect("login")
 
 
-class AddUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
+class AddUrzadzenieView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, CreateView):
     model = Urzadzenie
     form_class = UrzadzenieForm
     template_name = "magazyn_core/add_urzadzenie.html"
-    success_url = reverse_lazy("dashboard")
 
     def test_func(self):
         return is_not_observer(self.request.user)
+
+    def get_success_url(self):
+        magazyn_id = get_wybrany_magazyn(self.request)
+        return f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else reverse("dashboard")
 
     def form_valid(self, form):
         if Urzadzenie.objects.filter(numer_seryjny=form.cleaned_data["numer_seryjny"]).exists():
@@ -139,16 +140,17 @@ class AddUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
             uzytkownik=self.request.user
         )
         return response
-
-
-class AddCzescView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
+class AddCzescView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, CreateView):
     model = Czesc
     form_class = CzescForm
     template_name = "magazyn_core/add_czesc.html"
-    success_url = reverse_lazy("dashboard")
 
     def test_func(self):
         return is_not_observer(self.request.user)
+
+    def get_success_url(self):
+        magazyn_id = get_wybrany_magazyn(self.request)
+        return f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else reverse("dashboard")
 
     def form_valid(self, form):
         if form.cleaned_data["numer_seryjny"] and Czesc.objects.filter(numer_seryjny=form.cleaned_data["numer_seryjny"]).exists():
@@ -162,7 +164,7 @@ class AddCzescView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
         return response
 
 
-class DodajNaStanCzescView(UserPassesTestMixin, LoginRequiredMixin, View):
+class DodajNaStanCzescView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -186,11 +188,13 @@ class DodajNaStanCzescView(UserPassesTestMixin, LoginRequiredMixin, View):
             )
 
             messages.success(request, f"Uzupełniono część o {ilosc} sztuk.")
-            return redirect("dashboard")
+            magazyn_id = get_wybrany_magazyn(request)
+            return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
         return render(request, "magazyn_core/dodaj_na_stan_czesc.html", {"czesc": czesc, "form": form})
 
-class AddWypozyczenieView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
+
+class AddWypozyczenieView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, CreateView):
     model = Wypozyczenie
     form_class = WypozyczenieForm
     template_name = "magazyn_core/add_wypozyczenie.html"
@@ -199,15 +203,16 @@ class AddWypozyczenieView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
         return is_not_observer(self.request.user)
 
     def get_success_url(self):
-        return reverse_lazy("dashboard")
+        magazyn_id = get_wybrany_magazyn(self.request)
+        return f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else reverse("dashboard")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["urzadzenie"] = Urzadzenie.objects.get(pk=self.kwargs["pk"])
+        context["urzadzenie"] = get_object_or_404(Urzadzenie, pk=self.kwargs["pk"])
         return context
 
     def form_valid(self, form):
-        urzadzenie = Urzadzenie.objects.get(pk=self.kwargs["pk"])
+        urzadzenie = get_object_or_404(Urzadzenie, pk=self.kwargs["pk"])
         form.instance.urzadzenie = urzadzenie
         response = super().form_valid(form)
         OperacjaLog.objects.create(
@@ -218,7 +223,7 @@ class AddWypozyczenieView(UserPassesTestMixin, LoginRequiredMixin, CreateView):
         return response
 
 
-class ReturnWypozyczenieView(UserPassesTestMixin, LoginRequiredMixin, View):
+class ReturnWypozyczenieView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -230,10 +235,11 @@ class ReturnWypozyczenieView(UserPassesTestMixin, LoginRequiredMixin, View):
             uzytkownik=request.user
         )
         wyp.delete()
-        return redirect("dashboard")
+        magazyn_id = get_wybrany_magazyn(request)
+        return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
 
-class PrzesunUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, View):
+class PrzesunUrzadzenieView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -264,11 +270,12 @@ class PrzesunUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, View):
                 opis=f"{urzadzenie.nazwa.nazwa} ({urzadzenie.numer_seryjny}) z {stary_magazyn.nazwa} ➝ {nowy_magazyn.nazwa}",
                 uzytkownik=request.user
             )
-            return redirect("dashboard")
+
+            magazyn_id = get_wybrany_magazyn(request)
+            return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
+
         return render(request, "magazyn_core/przesun_urzadzenie.html", {"urzadzenie": urzadzenie, "form": form})
-
-
-class MarkNaStaleView(UserPassesTestMixin, LoginRequiredMixin, View):
+class MarkNaStaleView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -316,13 +323,15 @@ class MarkNaStaleView(UserPassesTestMixin, LoginRequiredMixin, View):
                 wyp.delete()
 
             messages.success(request, "Urządzenie przekazane na stałe.")
-            return redirect("dashboard")
+            magazyn_id = get_wybrany_magazyn(request)
+            return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
+
         return render(request, "magazyn_core/mark_na_stale.html", {
             "urzadzenie": urzadzenie, "form": form, "czy_z_wypozyczenia": bool(wyp)
         })
 
 
-class MarkCzescNaStaleView(UserPassesTestMixin, LoginRequiredMixin, View):
+class MarkCzescNaStaleView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -342,8 +351,7 @@ class MarkCzescNaStaleView(UserPassesTestMixin, LoginRequiredMixin, View):
             if ilosc > czesc.ilosc:
                 form.add_error("ilosc_do_przekazania", "Brak tylu sztuk na stanie.")
                 return render(request, "magazyn_core/mark_czesc_na_stale.html", {
-                    "czesc": czesc,
-                    "form": form
+                    "czesc": czesc, "form": form
                 })
 
             czesc.ilosc -= ilosc
@@ -370,14 +378,16 @@ class MarkCzescNaStaleView(UserPassesTestMixin, LoginRequiredMixin, View):
                 opis=f"{przekazana.nazwa.nazwa} ({przekazana.numer_seryjny or 'bez nr'}) {ilosc} szt. dla {przekazana.klient_nazwa}",
                 uzytkownik=request.user
             )
-            return redirect("dashboard")
+
+            magazyn_id = get_wybrany_magazyn(request)
+            return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
         return render(request, "magazyn_core/mark_czesc_na_stale.html", {
             "czesc": czesc,
             "form": form
         })
 
-class HistoriaUrzadzeniaView(LoginRequiredMixin, View):
+class HistoriaUrzadzeniaView(auth_mixins.LoginRequiredMixin, View):
     def get(self, request, pk):
         urzadzenie = get_object_or_404(Urzadzenie, pk=pk)
         wypozyczenia = Wypozyczenie.objects.filter(urzadzenie_id=pk)
@@ -385,14 +395,12 @@ class HistoriaUrzadzeniaView(LoginRequiredMixin, View):
         logi = OperacjaLog.objects.filter(opis__icontains=urzadzenie.numer_seryjny)
 
         timeline = []
-
         for w in wypozyczenia:
             timeline.append({
                 "data": timezone.make_aware(datetime.combine(w.data_wypozyczenia, datetime.min.time())),
                 "typ": "🎟️ Wypożyczenie",
                 "opis": f"Dla {w.klient_nazwa}, zgłoszenie: {w.numer_zgloszenia}"
             })
-
         for p in przesuniecia:
             aware = timezone.make_aware(p.data_przesuniecia) if timezone.is_naive(p.data_przesuniecia) else p.data_przesuniecia
             timeline.append({
@@ -400,7 +408,6 @@ class HistoriaUrzadzeniaView(LoginRequiredMixin, View):
                 "typ": "🔁 Przesunięcie",
                 "opis": f"{p.magazyn_zrodlowy.nazwa} → {p.magazyn_docelowy.nazwa}"
             })
-
         for log in logi:
             aware = timezone.make_aware(log.data_operacji) if timezone.is_naive(log.data_operacji) else log.data_operacji
             timeline.append({
@@ -408,7 +415,6 @@ class HistoriaUrzadzeniaView(LoginRequiredMixin, View):
                 "typ": f"📝 {log.typ_operacji}",
                 "opis": log.opis
             })
-
         timeline.sort(key=lambda x: x["data"], reverse=True)
 
         return render(request, "magazyn_core/historia_urzadzenia.html", {
@@ -420,7 +426,7 @@ class HistoriaUrzadzeniaView(LoginRequiredMixin, View):
         })
 
 
-class EksportHistoriaUrzadzeniaView(UserPassesTestMixin, LoginRequiredMixin, View):
+class EksportHistoriaUrzadzeniaView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -431,7 +437,6 @@ class EksportHistoriaUrzadzeniaView(UserPassesTestMixin, LoginRequiredMixin, Vie
         logi = OperacjaLog.objects.filter(opis__icontains=urzadzenie.numer_seryjny)
 
         wb = Workbook()
-
         ws1 = wb.active
         ws1.title = "Wypożyczenia"
         ws1.append(["Data", "Klient", "Zgłoszenie"])
@@ -468,7 +473,7 @@ class EksportHistoriaUrzadzeniaView(UserPassesTestMixin, LoginRequiredMixin, Vie
         return response
 
 
-class PrzywrocUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, View):
+class PrzywrocUrzadzenieView(auth_mixins.UserPassesTestMixin, auth_mixins.LoginRequiredMixin, View):
     def test_func(self):
         return is_not_observer(self.request.user)
 
@@ -488,102 +493,43 @@ class PrzywrocUrzadzenieView(UserPassesTestMixin, LoginRequiredMixin, View):
 
         OperacjaLog.objects.create(
             typ_operacji="ZWROT Z ARCHIWUM",
-            opis=f"Przywrócono: {urzadzenie.nazwa} ({urzadzenie.numer_seryjny}) do magazynu {urzadzenie.magazyn.nazwa}",
+            opis=f"Przywrócono: {urzadzenie.nazwa.nazwa} ({urzadzenie.numer_seryjny}) do magazynu {urzadzenie.magazyn.nazwa}",
             uzytkownik=request.user
         )
 
         arch.delete()
         messages.success(request, "Urządzenie przywrócono na stan magazynowy.")
-        return redirect("dashboard")
+        magazyn_id = get_wybrany_magazyn(request)
+        return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
-from django.contrib import messages
-from django.contrib.auth import logout, update_session_auth_hash
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
-from django.contrib.auth.models import User
-
-
-# Widok do zmiany hasła
-from django.contrib.auth import update_session_auth_hash
-
-@login_required
+@auth_decorators.login_required
 def zmien_haslo_startowe(request):
     if request.method == "POST":
         nowe_haslo = request.POST["password"]
         request.user.set_password(nowe_haslo)
         request.user.save()
-        
-        # Aktualizuj sesję, aby nie wylogować użytkownika
+
         update_session_auth_hash(request, request.user)
-        
-        # Ustaw last_login na teraz (już nie wymuszaj zmiany)
         request.user.last_login = timezone.now()
         request.user.save()
-        
+
         messages.success(request, "Hasło zostało zmienione!")
-        return redirect("dashboard")
-    
+        magazyn_id = get_wybrany_magazyn(request)
+        return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
+
     return render(request, "magazyn_core/zmien_haslo_startowe.html")
 
 
-# Widok do sprawdzenia, czy użytkownik powinien zmienić hasło
-@login_required
+@auth_decorators.login_required
 def sprawdzenie_hasla(request):
-    # Jeżeli to pierwsze logowanie użytkownika, przekierowujemy go do zmiany hasła
     if request.user.last_login is None or request.user.last_login == request.user.date_joined:
         return redirect("zmien_haslo_startowe")
-    else:
-        return redirect("dashboard")
+    magazyn_id = get_wybrany_magazyn(request)
+    return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
 
-# Pozostałe widoki w projekcie:
-from django.contrib.auth.models import User, Group
-from django.utils import timezone
-
-@login_required
-@user_passes_test(is_not_observer)
-def rejestruj_obserwatora(request):
-    if request.method == "POST":
-        username = request.POST["username"]
-        password = request.POST["password"]
-        magazyn_id = request.POST["magazyn"]
-
-        # Stwórz użytkownika, ale ZABLOKUJ last_login
-        user = User.objects.create_user(
-            username=username,
-            password=password,
-        )
-        user.save()  # Zapisujemy najpierw, aby mieć user.id
-
-        # Przypisz do grupy Obserwator
-        group = Group.objects.get(name="Obserwator")
-        user.groups.add(group)
-
-        # Przypisz magazyn (jeśli masz UserProfile)
-        magazyn = Magazyn.objects.get(id=magazyn_id)
-        profile, _ = UserProfile.objects.get_or_create(user=user)
-        profile.magazyn = magazyn
-        profile.save()
-
-        # UPEWNIJ SIĘ, ŻE last_login JEST NULL (wymusi zmianę hasła)
-        User.objects.filter(id=user.id).update(last_login=None)
-
-        return redirect("dashboard")
-
-    return render(request, "magazyn_core/rejestruj_obserwatora.html", {
-        "magazyny": Magazyn.objects.all()
-    })
-
-# Funkcja wylogowywania
-def custom_logout(request):
-    logout(request)
-    return redirect("login")
-
-
-
-
-@login_required
-@user_passes_test(is_not_observer)
+@auth_decorators.login_required
+@auth_decorators.user_passes_test(is_not_observer)
 def rejestruj_obserwatora(request):
     if request.method == "POST":
         username = request.POST["username"]
@@ -591,14 +537,14 @@ def rejestruj_obserwatora(request):
         password = request.POST["password"]
         magazyn_id = request.POST["magazyn"]
 
-        if User.objects.filter(username=username).exists():
+        if auth_models.User.objects.filter(username=username).exists():
             return render(request, "magazyn_core/rejestruj_obserwatora.html", {
                 "magazyny": Magazyn.objects.all(),
                 "error": "⚠ Użytkownik już istnieje!"
             })
 
-        user = User.objects.create_user(username=username, email=email, password=password)
-        group, _ = Group.objects.get_or_create(name="Obserwator")
+        user = auth_models.User.objects.create_user(username=username, email=email, password=password)
+        group, _ = auth_models.Group.objects.get_or_create(name="Obserwator")
         user.groups.add(group)
 
         magazyn = Magazyn.objects.get(id=magazyn_id)
@@ -606,15 +552,15 @@ def rejestruj_obserwatora(request):
         profile.magazyn = magazyn
         profile.save()
 
-        return redirect("dashboard")
+        request.session['wybrany_magazyn_id'] = magazyn.id
+        return redirect(f"{reverse('dashboard')}?magazyn={magazyn.id}")
 
     return render(request, "magazyn_core/rejestruj_obserwatora.html", {
         "magazyny": Magazyn.objects.all()
     })
 
-
-@login_required
-@user_passes_test(is_not_observer)
+@auth_decorators.login_required
+@auth_decorators.user_passes_test(is_not_observer)
 def eksport_excel(request):
     wb = Workbook()
     ws = wb.active
@@ -644,8 +590,8 @@ def eksport_excel(request):
     return response
 
 
-@login_required
-@user_passes_test(is_not_observer)
+@auth_decorators.login_required
+@auth_decorators.user_passes_test(is_not_observer)
 def eksport_widoku_excel(request):
     magazyn_id = request.GET.get("magazyn")
     fraza = request.GET.get("q")
@@ -694,8 +640,8 @@ def eksport_widoku_excel(request):
     return response
 
 
-@login_required
-@user_passes_test(is_not_observer)
+@auth_decorators.login_required
+@auth_decorators.user_passes_test(is_not_observer)
 def eksport_logi(request):
     wb = Workbook()
     ws = wb.active
@@ -715,31 +661,62 @@ def eksport_logi(request):
     wb.save(response)
     return response
 
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
-
-@login_required
-def sprawdzenie_hasla(request):
-    # Sprawdź, czy użytkownik NIGDY się nie logował (last_login == None)
-    if request.user.last_login is None:
-        return redirect("zmien_haslo_startowe")  # Przekieruj do zmiany hasła
-    return redirect("dashboard")  # W przeciwnym razie idź do dashboardu
+# Funkcja zabezpieczająca — domyślna sesja magazynu jeśli nie istnieje
+def ensure_magazyn_in_session(request):
+    if not request.session.get("wybrany_magazyn_id"):
+        if hasattr(request.user, "userprofile") and request.user.userprofile.magazyn:
+            request.session["wybrany_magazyn_id"] = request.user.userprofile.magazyn.id
 
 
-# Plik views.py zakończony — wszystkie widoki klasowe i funkcyjne zostały:
-# - chronione przed dostępem grupy „Obserwator”
-# - ujednolicone pod względem struktury
-# - zgodne ze ścieżkami z urls.py i widokiem index.html
-# - gotowe do testowania i wdrożenia
+# Przekierowanie do dashboardu z automatycznym dodaniem ?magazyn
+def redirect_to_dashboard(request):
+    ensure_magazyn_in_session(request)
+    magazyn_id = get_wybrany_magazyn(request)
+    return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}" if magazyn_id else "dashboard")
 
-# Jeśli dodasz nowe widoki w przyszłości, pamiętaj aby:
-# - dodać `UserPassesTestMixin` do widoków klasowych
-# - dodać `@user_passes_test(is_not_observer)` do widoków funkcyjnych
-# - schować przyciski w szablonie za pomocą `{% if not request.user.groups.all.0.name == "Obserwator" %}`
 
-# Możesz też utworzyć własne mixiny lub middleware, aby scentralizować logikę uprawnień.
+# Przykład użycia w przyszłym widoku
+@auth_decorators.login_required
+def powrot_do_magazynu(request):
+    messages.info(request, "Powrócono do magazynu.")
+    return redirect_to_dashboard(request)
+# Rezerwowane miejsce na przyszłe widoki API lub integracje z innymi modułami
+# Przykład widoku testowego — można usunąć lub rozbudować
 
-# 🔐 Twój magazyn jest teraz odporny na edycję przez użytkowników-obserwatorów,
-# a jednocześnie zachowuje dostęp podglądowy i interaktywność.
+@auth_decorators.login_required
+def testowy_widok(request):
+    magazyn_id = get_wybrany_magazyn(request)
+    return render(request, "magazyn_core/test.html", {
+        "magazyn_id": magazyn_id,
+        "user": request.user,
+        "magazyn_nazwa": Magazyn.objects.get(id=magazyn_id).nazwa if magazyn_id else "Brak"
+    })
 
-# Jeśli chcesz, mogę przygotować gotowy zestaw testów do sprawdzania uprawnień.
+
+# Widok do przyszłego filtrowania magazynu lub jego ustawień
+@auth_decorators.login_required
+def wybierz_magazyn(request):
+    if request.method == "POST":
+        magazyn_id = request.POST.get("magazyn_id")
+        if magazyn_id and Magazyn.objects.filter(id=magazyn_id).exists():
+            request.session["wybrany_magazyn_id"] = int(magazyn_id)
+            messages.success(request, "Zmieniono kontekst magazynu.")
+            return redirect(f"{reverse('dashboard')}?magazyn={magazyn_id}")
+        else:
+            messages.warning(request, "Nieprawidłowy magazyn.")
+    return render(request, "magazyn_core/wybierz_magazyn.html", {
+        "magazyny": Magazyn.objects.all()
+    })
+
+# Można tu dodać przyszłe widoki panelu menedżera lub administratora
+# Przykładowy szkielet:
+
+# @auth_decorators.login_required
+# @auth_decorators.user_passes_test(lambda u: u.is_superuser)
+# def panel_admin(request):
+#     return render(request, "magazyn_core/panel_admin.html")
+
+
+# Koniec pliku views.py
+# Plik w pełni zrefaktoryzowany — zgodność przekierowań, sesji magazynu, widoków
+# Gotowy do dalszego rozwoju lub przeniesienia do repozytorium 🎯
